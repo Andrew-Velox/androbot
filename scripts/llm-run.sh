@@ -46,10 +46,10 @@ port=${LLM_PORT:-8080}
 local_url="http://127.0.0.1:${port}"
 lan_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}' | head -n 1)
 if [[ -z "$lan_ip" ]]; then
-  lan_ip=$(ip -4 addr show 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | grep -v '^127\.' | head -n 1)
+  lan_ip=$(ip -4 addr show 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -n 1)
 fi
 if [[ -z "$lan_ip" ]]; then
-  lan_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+  lan_ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -n 1)
 fi
 if [[ -n "$lan_ip" ]]; then
   lan_url="http://${lan_ip}:${port}"
