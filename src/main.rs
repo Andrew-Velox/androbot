@@ -3,7 +3,7 @@ use axum::{
     Router,
 };
 use dotenvy::dotenv;
-use std::env;
+use std::{env, sync::{Arc, atomic::{AtomicBool, Ordering}}};
 
 mod config;
 mod routes;
@@ -15,6 +15,7 @@ use services::telegram::run_telegram_bot;
 #[derive(Clone)]
 pub struct AppState {
     pub llm_url: String,
+    pub telegram_started: Arc<AtomicBool>,
 }
 
 #[tokio::main]
@@ -28,13 +29,18 @@ async fn main() {
     let bind_addr = env::var("BIND_ADDR")
         .unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
 
-    let state = AppState { llm_url };
+    let state = AppState {
+        llm_url,
+        telegram_started: Arc::new(AtomicBool::new(false)),
+    };
 
     if let Ok(telegram_token) = env::var("TELEGRAM_BOT_TOKEN") {
         let llm_url = state.llm_url.clone();
+        let started = state.telegram_started.clone();
         tokio::spawn(async move {
             run_telegram_bot(telegram_token, llm_url).await;
         });
+        started.store(true, Ordering::Relaxed);
     } else {
         println!("ℹ️ Telegram bot disabled (TELEGRAM_BOT_TOKEN not set).")
     }

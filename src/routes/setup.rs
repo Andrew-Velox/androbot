@@ -1,8 +1,11 @@
-use axum::{extract::Form, response::Html};
+use axum::{extract::{Form, State}, response::Html};
 use serde::Deserialize;
+use std::sync::atomic::Ordering;
 
 use crate::config::{DEFAULT_BIND_ADDR, DEFAULT_LLM_URL};
+use crate::services::telegram::run_telegram_bot;
 use crate::services::env_store::{read_env_value, write_env_file};
+use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct SetupForm {
@@ -200,7 +203,7 @@ pub async fn setup_page() -> Html<String> {
         <input
           id="pat"
           name="page_access_token"
-          type="text"
+          type="password"
           value="{page_token}"
           placeholder="EAAxxxxx..."
           spellcheck="false"
@@ -217,7 +220,7 @@ pub async fn setup_page() -> Html<String> {
         <input
           id="tgt"
           name="telegram_bot_token"
-          type="text"
+          type="password"
           value="{tg_token}"
           placeholder="123456:ABCdef..."
           spellcheck="false"
@@ -227,7 +230,7 @@ pub async fn setup_page() -> Html<String> {
 
       <div class="notice">
         <span class="notice-icon">&#8505;&#65039;</span>
-        <span>The Telegram bot is started on server launch. If you add or change the token here, <strong>restart the server</strong> for it to take effect.</span>
+        <span>If you add a Telegram token here, the bot will start automatically. If you change the token later, restart the server to apply it.</span>
       </div>
 
       <button type="submit">Save Configuration</button>
@@ -242,7 +245,11 @@ pub async fn setup_page() -> Html<String> {
     Html(html)
 }
 
-pub async fn save_setup(Form(form): Form<SetupForm>) -> Html<String> {
+pub async fn save_setup(
+  State(state): State<AppState>,
+  Form(form): Form<SetupForm>,
+) -> Html<String> {
+  let previous_tg = read_env_value("TELEGRAM_BOT_TOKEN");
     let llm_url = read_env_value("LLM_URL").unwrap_or_else(|| DEFAULT_LLM_URL.to_string());
     let bind_addr = read_env_value("BIND_ADDR").unwrap_or_else(|| DEFAULT_BIND_ADDR.to_string());
 
@@ -253,15 +260,32 @@ pub async fn save_setup(Form(form): Form<SetupForm>) -> Html<String> {
         &bind_addr,
     );
 
-    Html(r#"<!doctype html>
+    let mut message = "Your settings have been written.".to_string();
+    let new_tg = form.telegram_bot_token.as_deref().unwrap_or("").trim();
+    let has_tg = !new_tg.is_empty();
+
+    if has_tg && !state.telegram_started.load(Ordering::Relaxed) {
+      let llm_url = state.llm_url.clone();
+      let token = new_tg.to_string();
+      let started = state.telegram_started.clone();
+      tokio::spawn(async move {
+        run_telegram_bot(token, llm_url).await;
+      });
+      started.store(true, Ordering::Relaxed);
+      message.push_str(" Telegram bot started.");
+    } else if has_tg && previous_tg.as_deref() != Some(new_tg) {
+      message.push_str(" If you changed the Telegram token, restart the server to apply it.");
+    }
+
+    Html(format!(r#"<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Androbot — Saved</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
+    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -270,8 +294,8 @@ pub async fn save_setup(Form(form): Form<SetupForm>) -> Html<String> {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
       color: #e2e8f0;
       padding: 1.5rem;
-    }
-    .card {
+    }}
+    .card {{
       width: 100%;
       max-width: 420px;
       background: #1a1d27;
@@ -280,11 +304,11 @@ pub async fn save_setup(Form(form): Form<SetupForm>) -> Html<String> {
       padding: 2.5rem 2rem;
       text-align: center;
       box-shadow: 0 24px 48px rgba(0,0,0,0.4);
-    }
-    .icon { font-size: 3rem; margin-bottom: 1rem; }
-    h2 { font-size: 1.4rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.5rem; }
-    p { color: #64748b; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.5rem; }
-    a {
+    }}
+    .icon {{ font-size: 3rem; margin-bottom: 1rem; }}
+    h2 {{ font-size: 1.4rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.5rem; }}
+    p {{ color: #64748b; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.5rem; }}
+    a {{
       display: inline-block;
       padding: 0.7rem 1.5rem;
       background: linear-gradient(135deg, #6366f1, #8b5cf6);
@@ -294,17 +318,17 @@ pub async fn save_setup(Form(form): Form<SetupForm>) -> Html<String> {
       text-decoration: none;
       font-size: 0.95rem;
       transition: opacity 0.2s;
-    }
-    a:hover { opacity: 0.85; }
+    }}
+    a:hover {{ opacity: 0.85; }}
   </style>
 </head>
 <body>
   <div class="card">
     <div class="icon">&#9989;</div>
     <h2>Configuration Saved</h2>
-    <p>Your settings have been written.<br>If you changed the Telegram token, restart the server for it to take effect.</p>
+    <p>{}</p>
     <a href="/setup">Back to Setup</a>
   </div>
 </body>
-</html>"#.to_string())
+</html>"#, message))
 }
