@@ -2,9 +2,8 @@
 
 This project runs a Meta webhook server and forwards messages to a local LLM HTTP server (llama.cpp).
 
-Repository: https://github.com/Andrew-Velox/androbot
 
-## Quick Start (Termux)
+## First-Time Setup (Termux)
 
 1) Clone the repo:
 
@@ -33,31 +32,43 @@ cd androbot
 
 The script only requires `PAGE_ACCESS_TOKEN`. It will reuse existing values and keep sensible defaults for `LLM_URL` and `BIND_ADDR`.
 
+Optional web setup (after the server is running):
+
+```
+http://127.0.0.1:3000/setup
+```
+
+This page lets you set `PAGE_ACCESS_TOKEN` and `TELEGRAM_BOT_TOKEN` without editing files.
+
+Optional: add Telegram by setting `TELEGRAM_BOT_TOKEN` in `.env` (from @BotFather). If set, the bot runs alongside Facebook and uses the same LLM.
+
 Webhook verify token (fixed):
 
 ```
 ANDROBOT_VERIFY_TOKEN
 ```
 
-5) Run the services in separate Termux sessions:
+## Run (Each Time)
 
-Terminal A (llama.cpp):
+1) Run the services in separate Termux sessions:
+
+Terminal A (llama.cpp [local LLM server]):
 
 ```bash
 ./scripts/llm-run.sh
 ```
 
-Terminal B (tunnel):
+Terminal B (tunnel [http server]):
 
 ```bash
 ./scripts/tunnel-cf.sh
 ```
 
-or
+<!-- or
 
 ```bash
 ./scripts/tunnel-ng.sh
-```
+``` -->
 
 Terminal C (webhook server):
 
@@ -72,6 +83,8 @@ Copy the HTTPS URL from the tunnel output and set your Meta webhook URL to:
 ```
 https://YOUR_TUNNEL_URL/webhook
 ```
+
+Telegram note: if `TELEGRAM_BOT_TOKEN` is set, the Telegram bot will start automatically when you run `./scripts/run.sh`.
 
 ## Notes
 
