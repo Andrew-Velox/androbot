@@ -22,7 +22,13 @@ This project runs a Meta webhook server and forwards messages to a local LLM HTT
 ./scripts/config.sh
 ```
 
-The script only requires `PAGE_ACCESS_TOKEN`. It will reuse existing values, auto-generate `VERIFY_TOKEN` if blank, and keep sensible defaults for `LLM_URL` and `BIND_ADDR`.
+The script only requires `PAGE_ACCESS_TOKEN`. It will reuse existing values and keep sensible defaults for `LLM_URL` and `BIND_ADDR`.
+
+Webhook verify token (fixed):
+
+```
+ANDROBOT_VERIFY_TOKEN
+```
 
 4) Run the services in separate Termux sessions:
 
@@ -49,6 +55,8 @@ Terminal C (webhook server):
 ```bash
 ./scripts/run.sh
 ```
+
+Tip: start the webhook server first, then start the tunnel. This avoids brief 502s while the tunnel connects.
 
 Copy the HTTPS URL from the tunnel output and set your Meta webhook URL to:
 

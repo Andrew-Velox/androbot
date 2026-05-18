@@ -8,9 +8,10 @@ use serde_json::{json, Value};
 use dotenvy::dotenv;
 use std::env;
 
+const VERIFY_TOKEN: &str = "ANDROBOT_VERIFY_TOKEN";
+
 #[derive(Clone)]
 struct AppState {
-    verify_token: String,
     llm_url: String,
 }
 
@@ -31,21 +32,12 @@ async fn main() {
     println!("🚀 Starting Meta Webhook Server & Local LLM Bridge...");
 
 
-    let verify_token = env::var("VERIFY_TOKEN")
-        .unwrap_or_else(|_| "ANDROBOT_SECURE_TOKEN_123".to_string());
-    if verify_token == "ANDROBOT_SECURE_TOKEN_123" {
-        println!("⚠️  VERIFY_TOKEN not set; using insecure default.");
-    }
-
     let llm_url = env::var("LLM_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8080/v1/chat/completions".to_string());
     let bind_addr = env::var("BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:3000".to_string());
 
-    let state = AppState {
-        verify_token,
-        llm_url,
-    };
+    let state = AppState { llm_url };
 
     // Build the axum router
     let app = Router::new()
@@ -60,12 +52,9 @@ async fn main() {
 }
 
 // 1. Meta Verification Endpoint
-async fn verify_webhook(
-    State(state): State<AppState>,
-    Query(params): Query<VerifyQuery>,
-) -> impl IntoResponse {
+async fn verify_webhook(Query(params): Query<VerifyQuery>) -> impl IntoResponse {
     if let (Some(mode), Some(token), Some(challenge)) = (params.mode, params.token, params.challenge) {
-        if mode == "subscribe" && token == state.verify_token {
+        if mode == "subscribe" && token == VERIFY_TOKEN {
             println!("✅ Webhook Verified by Meta!");
             return challenge;
         }
