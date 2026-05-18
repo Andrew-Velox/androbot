@@ -2,21 +2,30 @@
 
 This project runs a Meta webhook server and forwards messages to a local LLM HTTP server (llama.cpp).
 
+Repository: https://github.com/Andrew-Velox/androbot
+
 ## Quick Start (Termux)
 
-1) Setup dependencies and build:
+1) Clone the repo:
+
+```bash
+git clone https://github.com/Andrew-Velox/androbot.git
+cd androbot
+```
+
+2) Setup dependencies and build:
 
 ```bash
 ./scripts/setup.sh
 ```
 
-2) (Optional) Install llama.cpp and download a model:
+3) (Optional) Install llama.cpp and download a model:
 
 ```bash
 ./scripts/llm-setup.sh
 ```
 
-3) Create your env file (interactive):
+4) Create your env file (interactive):
 
 ```bash
 ./scripts/config.sh
@@ -30,7 +39,7 @@ Webhook verify token (fixed):
 ANDROBOT_VERIFY_TOKEN
 ```
 
-4) Run the services in separate Termux sessions:
+5) Run the services in separate Termux sessions:
 
 Terminal A (llama.cpp):
 
