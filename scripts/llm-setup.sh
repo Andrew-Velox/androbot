@@ -12,7 +12,7 @@ if [[ ! -d "$repo_dir" ]]; then
 fi
 
 cmake -S "$repo_dir" -B "$repo_dir/build" -DLLAMA_BUILD_SERVER=ON
-cmake --build "$repo_dir/build" --config Release
+cmake --build "$repo_dir/build" --config Release -j "$(nproc)"
 
 mkdir -p "$models_dir"
 
