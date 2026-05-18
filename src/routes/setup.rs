@@ -1,8 +1,8 @@
-use axum::{extract::{Form, State}, response::Html};
+use axum::{extract::{Form, Query, State}, response::{Html, Redirect}};
 use serde::Deserialize;
 
 use crate::config::{DEFAULT_BIND_ADDR, DEFAULT_LLM_URL};
-use crate::services::telegram::run_telegram_bot;
+use crate::services::telegram::{run_telegram_bot, validate_telegram_token};
 use crate::services::env_store::{read_env_value, write_env_file};
 use crate::AppState;
 
@@ -12,9 +12,23 @@ pub struct SetupForm {
     telegram_bot_token: Option<String>,
 }
 
-pub async fn setup_page() -> Html<String> {
+#[derive(Deserialize)]
+pub struct SetupQuery {
+    toast: Option<String>,
+}
+
+pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
     let page_access_token = read_env_value("PAGE_ACCESS_TOKEN").unwrap_or_default();
     let telegram_bot_token = read_env_value("TELEGRAM_BOT_TOKEN").unwrap_or_default();
+
+    let toast_html = match q.toast.as_deref() {
+        Some("saved")      => r#"<div class="toast">&#10003;&nbsp; Configuration saved</div>"#,
+        Some("tg_started") => r#"<div class="toast">&#10003;&nbsp; Configuration saved &mdash; Telegram bot started</div>"#,
+        Some("tg_updated") => r#"<div class="toast">&#10003;&nbsp; Configuration saved &mdash; Telegram bot restarted</div>"#,
+        Some("tg_stopped") => r#"<div class="toast">&#10003;&nbsp; Configuration saved &mdash; Telegram bot stopped</div>"#,
+        Some("tg_invalid") => r#"<div class="toast toast-error">&#10007;&nbsp; Invalid Telegram token &mdash; bot not started</div>"#,
+        _                  => "",
+    };
 
     let html = format!(
         r#"<!doctype html>
@@ -175,10 +189,45 @@ pub async fn setup_page() -> Html<String> {
     button[type="submit"]:hover {{ opacity: 0.9; }}
     button[type="submit"]:active {{ transform: scale(0.99); }}
 
+    .toast {{
+      position: fixed;
+      bottom: 1.75rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(0);
+      background: #14532d;
+      color: #bbf7d0;
+      border: 1px solid #16a34a;
+      border-radius: 10px;
+      padding: 0.75rem 1.25rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      white-space: nowrap;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      z-index: 999;
+      animation: toastIn 0.3s ease, toastOut 0.4s ease 3s forwards;
+    }}
+    .toast-error {{
+      background: #450a0a;
+      color: #fca5a5;
+      border-color: #dc2626;
+    }}
+
+    @keyframes toastIn {{
+      from {{ opacity: 0; transform: translateX(-50%) translateY(0.75rem); }}
+      to   {{ opacity: 1; transform: translateX(-50%) translateY(0); }}
+    }}
+    @keyframes toastOut {{
+      to   {{ opacity: 0; transform: translateX(-50%) translateY(0.75rem); }}
+    }}
+
     @media (max-width: 480px) {{
       .card {{ padding: 1.75rem 1.25rem; }}
       h1 {{ font-size: 1.3rem; }}
       .subtitle {{ padding-left: 0; }}
+      .toast {{ white-space: normal; text-align: center; width: calc(100% - 3rem); }}
     }}
   </style>
 </head>
@@ -229,16 +278,27 @@ pub async fn setup_page() -> Html<String> {
 
       <div class="notice">
         <span class="notice-icon">&#8505;&#65039;</span>
-        <span>If you add a Telegram token here, the bot will start automatically. If you change the token later, restart the server to apply it.</span>
+        <span>If you add a Telegram token here, the bot will start automatically. If you change the token later, it restarts instantly — no server restart needed.</span>
       </div>
 
       <button type="submit">Save Configuration</button>
     </form>
   </div>
+
+  {toast_html}
+
+  <script>
+    const t = document.querySelector('.toast');
+    if (t) {{
+      history.replaceState(null, '', '/setup');
+      setTimeout(() => t.remove(), 3400);
+    }}
+  </script>
 </body>
 </html>"#,
         page_token = page_access_token,
         tg_token = telegram_bot_token,
+        toast_html = toast_html,
     );
 
     Html(html)
@@ -247,90 +307,47 @@ pub async fn setup_page() -> Html<String> {
 pub async fn save_setup(
     State(state): State<AppState>,
     Form(form): Form<SetupForm>,
-) -> Html<String> {
+) -> Redirect {
     let previous_tg = read_env_value("TELEGRAM_BOT_TOKEN").unwrap_or_default();
     let llm_url = read_env_value("LLM_URL").unwrap_or_else(|| DEFAULT_LLM_URL.to_string());
     let bind_addr = read_env_value("BIND_ADDR").unwrap_or_else(|| DEFAULT_BIND_ADDR.to_string());
 
+    let new_tg = form.telegram_bot_token.as_deref().unwrap_or("").trim().to_string();
+
     let _ = write_env_file(
         &form.page_access_token,
-        form.telegram_bot_token.as_deref(),
+        if new_tg.is_empty() { None } else { Some(new_tg.as_str()) },
         &llm_url,
         &bind_addr,
     );
 
-    let new_tg = form.telegram_bot_token.as_deref().unwrap_or("").trim().to_string();
-    let mut message = "Your settings have been written.".to_string();
-
-    if new_tg != previous_tg {
-        let mut task = state.telegram_task.lock().await;
-        if let Some(handle) = task.take() {
-            handle.abort();
-        }
+    let toast = if new_tg != previous_tg {
         if !new_tg.is_empty() {
-            let llm_url = state.llm_url.clone();
-            let token = new_tg.clone();
-            *task = Some(tokio::spawn(async move {
-                run_telegram_bot(token, llm_url).await;
-            }));
-            message.push_str(" Telegram bot started with new token.");
+            if !validate_telegram_token(&new_tg).await {
+                println!("⚠️  Setup: invalid Telegram token submitted — bot not started");
+                "tg_invalid"
+            } else {
+                let mut task = state.telegram_task.lock().await;
+                if let Some(handle) = task.take() {
+                    handle.abort();
+                }
+                let llm_url = state.llm_url.clone();
+                let token = new_tg.clone();
+                *task = Some(tokio::spawn(async move {
+                    run_telegram_bot(token, llm_url).await;
+                }));
+                if previous_tg.is_empty() { "tg_started" } else { "tg_updated" }
+            }
         } else {
-            message.push_str(" Telegram bot stopped.");
+            let mut task = state.telegram_task.lock().await;
+            if let Some(handle) = task.take() {
+                handle.abort();
+            }
+            "tg_stopped"
         }
-    }
+    } else {
+        "saved"
+    };
 
-    Html(format!(r#"<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Androbot — Saved</title>
-  <style>
-    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #0f1117;
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      color: #e2e8f0;
-      padding: 1.5rem;
-    }}
-    .card {{
-      width: 100%;
-      max-width: 420px;
-      background: #1a1d27;
-      border: 1px solid #2d3148;
-      border-radius: 16px;
-      padding: 2.5rem 2rem;
-      text-align: center;
-      box-shadow: 0 24px 48px rgba(0,0,0,0.4);
-    }}
-    .icon {{ font-size: 3rem; margin-bottom: 1rem; }}
-    h2 {{ font-size: 1.4rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.5rem; }}
-    p {{ color: #64748b; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.5rem; }}
-    a {{
-      display: inline-block;
-      padding: 0.7rem 1.5rem;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      border-radius: 8px;
-      color: #fff;
-      font-weight: 600;
-      text-decoration: none;
-      font-size: 0.95rem;
-      transition: opacity 0.2s;
-    }}
-    a:hover {{ opacity: 0.85; }}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="icon">&#9989;</div>
-    <h2>Configuration Saved</h2>
-    <p>{}</p>
-    <a href="/setup">Back to Setup</a>
-  </div>
-</body>
-</html>"#, message))
+    Redirect::to(&format!("/setup?toast={}", toast))
 }
