@@ -43,4 +43,13 @@ echo "Using model: $model_file"
 host=${LLM_HOST:-0.0.0.0}
 port=${LLM_PORT:-8080}
 
+local_url="http://127.0.0.1:${port}"
+lan_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}' | head -n 1)
+if [[ -n "$lan_ip" ]]; then
+  lan_url="http://${lan_ip}:${port}"
+  echo "LLM will listen on: ${local_url} (local), ${lan_url} (LAN)"
+else
+  echo "LLM will listen on: ${local_url} (local)"
+fi
+
 "$repo_dir/build/bin/llama-server" -m "$model_file" --host "$host" --port "$port"
