@@ -30,6 +30,11 @@ async fn main() {
     dotenv().ok();
     println!("🚀 Starting Meta Webhook Server & Local LLM Bridge...");
 
+    #[cfg(target_os = "android")]
+    {
+        rustls_platform_verifier::initialize();
+    }
+
     let verify_token = env::var("VERIFY_TOKEN")
         .unwrap_or_else(|_| "ANDROBOT_SECURE_TOKEN_123".to_string());
     if verify_token == "ANDROBOT_SECURE_TOKEN_123" {

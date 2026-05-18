@@ -10,3 +10,4 @@ reqwest = { version = "0.13.3", default-features = false, features = ["json", "r
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros"] }
+rustls-platform-verifier = "0.7.0"
