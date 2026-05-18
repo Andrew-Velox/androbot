@@ -49,6 +49,9 @@ if [[ -z "$lan_ip" ]]; then
   lan_ip=$(ip -4 addr show 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -n 1)
 fi
 if [[ -z "$lan_ip" ]]; then
+  lan_ip=$(ifconfig 2>/dev/null | awk '/inet / {print $2}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -n 1)
+fi
+if [[ -z "$lan_ip" ]]; then
   lan_ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -n 1)
 fi
 if [[ -n "$lan_ip" ]]; then
