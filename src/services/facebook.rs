@@ -1,10 +1,11 @@
 use reqwest::Client;
 use serde_json::json;
-use std::env;
+
+use crate::services::env_store::read_env_value;
 
 pub async fn send_facebook_message(recipient_id: &str, text: &str) -> Result<(), String> {
-    let token = env::var("PAGE_ACCESS_TOKEN")
-        .map_err(|_| "Missing PAGE_ACCESS_TOKEN env var".to_string())?;
+    let token = read_env_value("PAGE_ACCESS_TOKEN")
+        .ok_or_else(|| "Missing PAGE_ACCESS_TOKEN".to_string())?;
 
     let client = Client::new();
     let url = format!(

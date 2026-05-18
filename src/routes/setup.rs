@@ -1,6 +1,5 @@
 use axum::{extract::{Form, State}, response::Html};
 use serde::Deserialize;
-use std::sync::atomic::Ordering;
 
 use crate::config::{DEFAULT_BIND_ADDR, DEFAULT_LLM_URL};
 use crate::services::telegram::run_telegram_bot;
@@ -246,10 +245,10 @@ pub async fn setup_page() -> Html<String> {
 }
 
 pub async fn save_setup(
-  State(state): State<AppState>,
-  Form(form): Form<SetupForm>,
+    State(state): State<AppState>,
+    Form(form): Form<SetupForm>,
 ) -> Html<String> {
-  let previous_tg = read_env_value("TELEGRAM_BOT_TOKEN");
+    let previous_tg = read_env_value("TELEGRAM_BOT_TOKEN").unwrap_or_default();
     let llm_url = read_env_value("LLM_URL").unwrap_or_else(|| DEFAULT_LLM_URL.to_string());
     let bind_addr = read_env_value("BIND_ADDR").unwrap_or_else(|| DEFAULT_BIND_ADDR.to_string());
 
@@ -260,21 +259,24 @@ pub async fn save_setup(
         &bind_addr,
     );
 
+    let new_tg = form.telegram_bot_token.as_deref().unwrap_or("").trim().to_string();
     let mut message = "Your settings have been written.".to_string();
-    let new_tg = form.telegram_bot_token.as_deref().unwrap_or("").trim();
-    let has_tg = !new_tg.is_empty();
 
-    if has_tg && !state.telegram_started.load(Ordering::Relaxed) {
-      let llm_url = state.llm_url.clone();
-      let token = new_tg.to_string();
-      let started = state.telegram_started.clone();
-      tokio::spawn(async move {
-        run_telegram_bot(token, llm_url).await;
-      });
-      started.store(true, Ordering::Relaxed);
-      message.push_str(" Telegram bot started.");
-    } else if has_tg && previous_tg.as_deref() != Some(new_tg) {
-      message.push_str(" If you changed the Telegram token, restart the server to apply it.");
+    if new_tg != previous_tg {
+        let mut task = state.telegram_task.lock().await;
+        if let Some(handle) = task.take() {
+            handle.abort();
+        }
+        if !new_tg.is_empty() {
+            let llm_url = state.llm_url.clone();
+            let token = new_tg.clone();
+            *task = Some(tokio::spawn(async move {
+                run_telegram_bot(token, llm_url).await;
+            }));
+            message.push_str(" Telegram bot started with new token.");
+        } else {
+            message.push_str(" Telegram bot stopped.");
+        }
     }
 
     Html(format!(r#"<!doctype html>

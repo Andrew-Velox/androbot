@@ -3,7 +3,9 @@ use axum::{
     Router,
 };
 use dotenvy::dotenv;
-use std::{env, sync::{Arc, atomic::{AtomicBool, Ordering}}};
+use std::{env, sync::Arc};
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 
 mod config;
 mod routes;
@@ -15,7 +17,7 @@ use services::telegram::run_telegram_bot;
 #[derive(Clone)]
 pub struct AppState {
     pub llm_url: String,
-    pub telegram_started: Arc<AtomicBool>,
+    pub telegram_task: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 #[tokio::main]
@@ -23,27 +25,24 @@ async fn main() {
     dotenv().ok();
     println!("🚀 Starting Meta Webhook Server & Local LLM Bridge...");
 
-
     let llm_url = env::var("LLM_URL")
         .unwrap_or_else(|_| DEFAULT_LLM_URL.to_string());
     let bind_addr = env::var("BIND_ADDR")
         .unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
 
-    let state = AppState {
-        llm_url,
-        telegram_started: Arc::new(AtomicBool::new(false)),
-    };
+    let telegram_task: Arc<Mutex<Option<JoinHandle<()>>>> = Arc::new(Mutex::new(None));
 
-    if let Ok(telegram_token) = env::var("TELEGRAM_BOT_TOKEN") {
-        let llm_url = state.llm_url.clone();
-        let started = state.telegram_started.clone();
-        tokio::spawn(async move {
-            run_telegram_bot(telegram_token, llm_url).await;
+    if let Ok(token) = env::var("TELEGRAM_BOT_TOKEN") {
+        let llm = llm_url.clone();
+        let handle = tokio::spawn(async move {
+            run_telegram_bot(token, llm).await;
         });
-        started.store(true, Ordering::Relaxed);
+        *telegram_task.lock().await = Some(handle);
     } else {
         println!("ℹ️ Telegram bot disabled (TELEGRAM_BOT_TOKEN not set).")
     }
+
+    let state = AppState { llm_url, telegram_task };
 
     // Build the axum router
     let app = Router::new()
