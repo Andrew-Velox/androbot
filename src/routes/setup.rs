@@ -3,13 +3,14 @@ use serde::Deserialize;
 
 use crate::config::{DEFAULT_BIND_ADDR, DEFAULT_LLM_URL};
 use crate::services::telegram::{run_telegram_bot, validate_telegram_token};
-use crate::services::env_store::{read_env_value, write_env_file};
+use crate::services::env_store::{read_env_value, write_env_file, read_system_prompt, write_system_prompt};
 use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct SetupForm {
     page_access_token: String,
     telegram_bot_token: Option<String>,
+    system_prompt: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -20,6 +21,7 @@ pub struct SetupQuery {
 pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
     let page_access_token = read_env_value("PAGE_ACCESS_TOKEN").unwrap_or_default();
     let telegram_bot_token = read_env_value("TELEGRAM_BOT_TOKEN").unwrap_or_default();
+    let system_prompt = read_system_prompt();
 
     let toast_html = match q.toast.as_deref() {
         Some("saved")      => r#"<div class="toast">&#10003;&nbsp; Configuration saved</div>"#,
@@ -156,6 +158,27 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
 
     .badge-optional {{ background: #1e3a2e; color: #6ee7b7; }}
 
+    textarea {{
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 0.85rem;
+      font-family: 'Courier New', monospace;
+      line-height: 1.5;
+      resize: vertical;
+      min-height: 140px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }}
+    textarea:focus {{
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }}
+    textarea::placeholder {{ color: #334155; }}
+
     .notice {{
       display: flex;
       gap: 0.6rem;
@@ -276,6 +299,17 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
         >
       </div>
 
+      <div class="field">
+        <label for="sp">System Prompt</label>
+        <p class="field-desc">Defines the AI persona sent to the LLM on every message. Leave blank to use the model's default.</p>
+        <textarea
+          id="sp"
+          name="system_prompt"
+          placeholder="You are a helpful assistant..."
+          spellcheck="false"
+        >{system_prompt}</textarea>
+      </div>
+
       <div class="notice">
         <span class="notice-icon">&#8505;&#65039;</span>
         <span>If you add a Telegram token here, the bot will start automatically. If you change the token later, it restarts instantly — no server restart needed.</span>
@@ -298,6 +332,7 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
 </html>"#,
         page_token = page_access_token,
         tg_token = telegram_bot_token,
+        system_prompt = system_prompt,
         toast_html = toast_html,
     );
 
@@ -313,6 +348,8 @@ pub async fn save_setup(
     let bind_addr = read_env_value("BIND_ADDR").unwrap_or_else(|| DEFAULT_BIND_ADDR.to_string());
 
     let new_tg = form.telegram_bot_token.as_deref().unwrap_or("").trim().to_string();
+    let new_prompt = form.system_prompt.as_deref().unwrap_or("").to_string();
+    let _ = write_system_prompt(&new_prompt);
 
     let _ = write_env_file(
         &form.page_access_token,

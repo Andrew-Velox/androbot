@@ -2,6 +2,16 @@ use std::fs;
 
 use crate::config::{DEFAULT_BIND_ADDR, DEFAULT_LLM_URL};
 
+const SYSTEM_PROMPT_FILE: &str = "system_prompt.txt";
+
+pub fn read_system_prompt() -> String {
+    fs::read_to_string(SYSTEM_PROMPT_FILE).unwrap_or_default()
+}
+
+pub fn write_system_prompt(prompt: &str) -> std::io::Result<()> {
+    fs::write(SYSTEM_PROMPT_FILE, prompt)
+}
+
 pub fn read_env_value(key: &str) -> Option<String> {
     let content = fs::read_to_string(".env").ok()?;
     for line in content.lines() {
