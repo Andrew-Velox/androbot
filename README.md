@@ -18,7 +18,7 @@ cd androbot
 ./scripts/setup.sh
 ```
 
-3) (Optional) Install llama.cpp and download a model:
+3) Install llama.cpp and download a model:
 
 ```bash
 ./scripts/llm-setup.sh
