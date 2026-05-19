@@ -82,4 +82,6 @@ echo ""
   -c 512 \
   -n 128 \
   -b 256 \
-  --cache-ram 0
+  --parallel 1 \
+  --kv-unified \
+  --cache-ram 256
