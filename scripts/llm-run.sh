@@ -82,5 +82,4 @@ echo ""
   -c 512 \
   -n 128 \
   -b 256 \
-  --parallel 1 \
   --cache-ram 0
