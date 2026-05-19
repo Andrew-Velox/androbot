@@ -81,5 +81,4 @@ echo ""
   -t "$threads" \
   -c 512 \
   -n 256 \
-  -b 512 \
-  --flash-attn
+  -b 512
