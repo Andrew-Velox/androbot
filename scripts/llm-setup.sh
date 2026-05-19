@@ -1,8 +1,11 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
-repo_dir="llama.cpp"
-models_dir="models"
+# Canonical paths — always resolved relative to this script's parent directory
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+project_dir="$(dirname "$script_dir")"
+repo_dir="$project_dir/llama.cpp"
+models_dir="$project_dir/models"
 
 # ── Dependencies & build ───────────────────────────────────────────────────────
 pkg update -y
@@ -80,11 +83,13 @@ fi
 
 echo "  Model : $selected_name"
 
-# Remove any previously installed model
-if ls "$models_dir"/*.gguf >/dev/null 2>&1; then
-  echo "  Removing previous model(s)..."
-  rm -f "$models_dir"/*.gguf
-fi
+# Remove all previously downloaded models across known locations.
+# Excludes ggml-vocab-* which are llama.cpp's own internal files.
+echo "  Removing old model files..."
+find "$HOME" -maxdepth 6 -type f -name "*.gguf" \
+  ! -name "ggml-vocab-*" \
+  -delete 2>/dev/null || true
+echo "  Done."
 
 file_name=$(basename "$selected_url")
 echo "  Downloading $file_name ..."

@@ -1,8 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
-repo_dir="llama.cpp"
-models_dir="models"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+project_dir="$(dirname "$script_dir")"
+repo_dir="$project_dir/llama.cpp"
+models_dir="$project_dir/models"
 
 if [[ ! -x "$repo_dir/build/bin/llama-server" ]]; then
   echo "llama-server not built. Run: ./scripts/llm-setup.sh"
@@ -64,4 +66,20 @@ else
   echo "LLM will listen on: ${local_url} (local)"
 fi
 
-"$repo_dir/build/bin/llama-server" -m "$model_file" --host "$host" --port "$port"
+threads=$(nproc 2>/dev/null || echo 4)
+
+echo ""
+echo "  Threads : $threads"
+echo "  Context : 512 tokens"
+echo "  Batch   : 512"
+echo ""
+
+"$repo_dir/build/bin/llama-server" \
+  -m "$model_file" \
+  --host "$host" \
+  --port "$port" \
+  -t "$threads" \
+  -c 512 \
+  -n 256 \
+  -b 512 \
+  --flash-attn
