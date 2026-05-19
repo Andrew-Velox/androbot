@@ -47,16 +47,16 @@ pub async fn query_local_llm(llm_url: &str, prompt: &str) -> String {
 
     let system_prompt = read_system_prompt();
     let datetime = current_datetime_string();
-    let datetime_prefix = format!("Current date and time: {}\n\n", datetime);
 
     let mut messages = vec![];
     if !system_prompt.trim().is_empty() {
-        let full_system = format!("{}{}", datetime_prefix, system_prompt.trim());
-        messages.push(json!({"role": "system", "content": full_system}));
-    } else {
-        messages.push(json!({"role": "system", "content": datetime_prefix.trim()}));
+        messages.push(json!({"role": "system", "content": system_prompt.trim()}));
     }
-    messages.push(json!({"role": "user", "content": prompt}));
+
+    // Prepend datetime to the user message — small models reliably read this
+    // even when they ignore system prompt context from training bias
+    let user_content = format!("[Current date and time: {}]\n{}", datetime, prompt);
+    messages.push(json!({"role": "user", "content": user_content}));
 
     let payload = json!({
         "messages": messages,
