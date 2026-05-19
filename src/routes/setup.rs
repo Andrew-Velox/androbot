@@ -179,21 +179,6 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
     }}
     textarea::placeholder {{ color: #334155; }}
 
-    .notice {{
-      display: flex;
-      gap: 0.6rem;
-      align-items: flex-start;
-      background: #1e2433;
-      border: 1px solid #2d3a4a;
-      border-radius: 8px;
-      padding: 0.75rem 1rem;
-      margin-bottom: 1.75rem;
-      font-size: 0.82rem;
-      color: #7dd3fc;
-      line-height: 1.5;
-    }}
-
-    .notice-icon {{ flex-shrink: 0; margin-top: 0.05rem; }}
 
     button[type="submit"] {{
       width: 100%;
@@ -310,10 +295,7 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
         >{system_prompt}</textarea>
       </div>
 
-      <div class="notice">
-        <span class="notice-icon">&#8505;&#65039;</span>
-        <span>If you add a Telegram token here, the bot will start automatically. If you change the token later, it restarts instantly — no server restart needed.</span>
-      </div>
+      
 
       <button type="submit">Save Configuration</button>
     </form>
