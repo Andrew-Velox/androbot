@@ -71,7 +71,7 @@ threads=$(nproc 2>/dev/null || echo 4)
 echo ""
 echo "  Threads : $threads"
 echo "  Context : 512 tokens"
-echo "  Batch   : 512"
+echo "  Batch   : 256"
 echo ""
 
 "$repo_dir/build/bin/llama-server" \
@@ -79,6 +79,7 @@ echo ""
   --host "$host" \
   --port "$port" \
   -t "$threads" \
-  -c 1024 \
-  -n 256 \
-  -b 512
+  -c 512 \
+  -n 128 \
+  -b 256 \
+  --parallel 1
