@@ -67,21 +67,38 @@ else
 fi
 
 threads=$(nproc 2>/dev/null || echo 4)
+context=${LLM_CONTEXT:-512}
+batch=${LLM_BATCH:-256}
+predict=${LLM_PREDICT:-128}
+parallel=${LLM_PARALLEL:-1}
+cache_ram=${LLM_CACHE_RAM:-256}
+kv_unified=${LLM_KV_UNIFIED:-1}
 
 echo ""
 echo "  Threads : $threads"
-echo "  Context : 512 tokens"
-echo "  Batch   : 256"
+echo "  Context : ${context} tokens"
+echo "  Batch   : ${batch}"
+echo "  Cache   : ${cache_ram} MiB"
+if [[ "$kv_unified" == "1" ]]; then
+  echo "  KV mode : unified"
+else
+  echo "  KV mode : default"
+fi
 echo ""
+
+kv_args=()
+if [[ "$kv_unified" == "1" ]]; then
+  kv_args+=(--kv-unified)
+fi
 
 "$repo_dir/build/bin/llama-server" \
   -m "$model_file" \
   --host "$host" \
   --port "$port" \
   -t "$threads" \
-  -c 512 \
-  -n 128 \
-  -b 256 \
-  --parallel 1 \
-  --kv-unified \
-  --cache-ram 256
+  -c "$context" \
+  -n "$predict" \
+  -b "$batch" \
+  --parallel "$parallel" \
+  "${kv_args[@]}" \
+  --cache-ram "$cache_ram"
