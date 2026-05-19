@@ -79,6 +79,6 @@ echo ""
   --host "$host" \
   --port "$port" \
   -t "$threads" \
-  -c 2048 \
+  -c 1024 \
   -n 256 \
   -b 512
