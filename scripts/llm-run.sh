@@ -11,25 +11,8 @@ if [[ ! -x "$repo_dir/build/bin/llama-server" ]]; then
   exit 1
 fi
 
-model_file=""
-
-search_paths=(
-  "$models_dir"
-  "$repo_dir/models"
-  "$HOME/llama.cpp"
-  "$HOME/llama.cpp/models"
-)
-
-for dir in "${search_paths[@]}"; do
-  if [[ -d "$dir" ]]; then
-    model_file=$(find "$dir" -maxdepth 2 -type f -name "*.gguf" \
-      ! -name "ggml-vocab-*" -printf "%s %p\n" 2>/dev/null | \
-      sort -nr | head -n 1 | awk '{print $2}')
-    if [[ -n "$model_file" ]]; then
-      break
-    fi
-  fi
-done
+model_file=$(find "$models_dir" "$repo_dir/models" -maxdepth 2 -type f -name "*.gguf" \
+  ! -name "ggml-vocab-*" -printf "%s %p\n" 2>/dev/null | sort -nr | head -n1 | awk '{print $2}')
 
 if [[ -z "$model_file" ]]; then
   read -r -p "Path to model (.gguf): " model_file
@@ -40,65 +23,14 @@ if [[ ! -f "$model_file" ]]; then
   exit 1
 fi
 
-echo "Using model: $model_file"
-
 host=${LLM_HOST:-0.0.0.0}
 port=${LLM_PORT:-8080}
 
-local_url="http://127.0.0.1:${port}"
-lan_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}' | head -n 1)
-if [[ -n "$lan_ip" && ! "$lan_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  lan_ip=""
-fi
-if [[ -z "$lan_ip" ]]; then
-  lan_ip=$(ip -4 addr show 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -n 1)
-fi
-if [[ -z "$lan_ip" ]]; then
-  lan_ip=$(ifconfig 2>/dev/null | awk '/inet / {print $2}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -n 1)
-fi
-if [[ -z "$lan_ip" ]]; then
-  lan_ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -n 1)
-fi
-if [[ -n "$lan_ip" ]]; then
-  lan_url="http://${lan_ip}:${port}"
-  echo "LLM will listen on: ${local_url} (local), ${lan_url} (LAN)"
-else
-  echo "LLM will listen on: ${local_url} (local)"
-fi
+echo "Model : $model_file"
+echo "URL   : http://127.0.0.1:${port}"
 
-threads=$(nproc 2>/dev/null || echo 4)
-context=${LLM_CONTEXT:-512}
-batch=${LLM_BATCH:-256}
-predict=${LLM_PREDICT:-128}
-parallel=${LLM_PARALLEL:-1}
-cache_ram=${LLM_CACHE_RAM:-256}
-kv_unified=${LLM_KV_UNIFIED:-1}
-
-echo ""
-echo "  Threads : $threads"
-echo "  Context : ${context} tokens"
-echo "  Batch   : ${batch}"
-echo "  Cache   : ${cache_ram} MiB"
-if [[ "$kv_unified" == "1" ]]; then
-  echo "  KV mode : unified"
-else
-  echo "  KV mode : default"
-fi
-echo ""
-
-kv_args=()
-if [[ "$kv_unified" == "1" ]]; then
-  kv_args+=(--kv-unified)
-fi
-
-"$repo_dir/build/bin/llama-server" \
+exec "$repo_dir/build/bin/llama-server" \
   -m "$model_file" \
   --host "$host" \
   --port "$port" \
-  -t "$threads" \
-  -c "$context" \
-  -n "$predict" \
-  -b "$batch" \
-  --parallel "$parallel" \
-  "${kv_args[@]}" \
-  --cache-ram "$cache_ram"
+  --cache-ram 256
