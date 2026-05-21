@@ -9,6 +9,7 @@ BIND_ADDR=0.0.0.0:3000
 LLM_API_BASE_URL=
 LLM_API_MODEL=
 LLM_API_KEY=
+DATABASE_URL=
 EOF
   echo "Created .env with defaults. Open /setup to add tokens."
 fi

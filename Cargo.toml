@@ -10,4 +10,5 @@ reqwest = { version = "0.13.3", default-features = false, features = ["json", "n
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 teloxide = "0.17.0"
-tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "time", "sync"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres"] }

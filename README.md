@@ -45,6 +45,25 @@ To run a GGUF model on-device with llama.cpp:
 
 Drop your `.gguf` model into the `models/` folder. The largest `.gguf` found there is used automatically.
 
+## Live Data via Database URL
+
+Paste a Postgres URL into `/setup` → "Database URL":
+
+```
+postgres://user:pass@host:5432/dbname
+```
+
+Androbot auto-introspects the schema and exposes a `query_database` tool to the AI, so it can answer customer questions using real product/order/inventory data.
+
+**Safety guardrails (always on):**
+
+- Only `SELECT` and `WITH` queries — `INSERT`/`UPDATE`/`DELETE`/`DROP`/etc. are rejected at validation time.
+- Multi-statement queries are rejected (no `;` in the middle).
+- 5 s query timeout, 2 connections max, results capped at 50 rows / 2000 chars.
+- For extra safety, connect with a Postgres role that has only `SELECT` grants.
+
+Works with Supabase, Neon, RDS, or any Postgres-compatible DB. Requires `LLM_API_KEY` (local Gemma 2B is too small for reliable tool calls).
+
 ## Use a Hosted API Instead
 
 Set these in `.env` or the setup page to skip the local model entirely:

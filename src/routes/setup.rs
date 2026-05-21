@@ -14,6 +14,7 @@ pub struct SetupForm {
   llm_api_base_url: Option<String>,
   llm_api_model: Option<String>,
   llm_api_key: Option<String>,
+  database_url: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -28,6 +29,7 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
     let llm_api_base_url = read_env_value("LLM_API_BASE_URL").unwrap_or_default();
     let llm_api_model = read_env_value("LLM_API_MODEL").unwrap_or_default();
     let llm_api_key = read_env_value("LLM_API_KEY").unwrap_or_default();
+    let database_url = read_env_value("DATABASE_URL").unwrap_or_default();
 
     let toast_html = match q.toast.as_deref() {
         Some("saved")      => r#"<div class="toast">&#10003;&nbsp; Configuration saved</div>"#,
@@ -35,6 +37,7 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
         Some("tg_updated") => r#"<div class="toast">&#10003;&nbsp; Configuration saved &mdash; Telegram bot restarted</div>"#,
         Some("tg_stopped") => r#"<div class="toast">&#10003;&nbsp; Configuration saved &mdash; Telegram bot stopped</div>"#,
         Some("tg_invalid") => r#"<div class="toast toast-error">&#10007;&nbsp; Invalid Telegram token &mdash; bot not started</div>"#,
+        Some("db_bad")     => r#"<div class="toast toast-error">&#10007;&nbsp; Database URL must start with postgres:// &mdash; not saved</div>"#,
         _                  => "",
     };
 
@@ -361,6 +364,23 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
         >{system_prompt}</textarea>
       </div>
 
+      <div class="field">
+        <label for="db_url">
+          Database URL (Postgres)
+          <span class="badge badge-optional">Optional</span>
+        </label>
+        <p class="field-desc">If set, the AI can run read-only SELECT queries against your DB. Schema is auto-introspected. Only SELECT/WITH allowed; multi-statement and writes are rejected. Requires API key.</p>
+        <input
+          id="db_url"
+          name="database_url"
+          type="password"
+          value="{database_url}"
+          placeholder="postgres://user:pass@host:5432/dbname"
+          spellcheck="false"
+          autocomplete="off"
+        >
+      </div>
+
       <button type="submit">Save Configuration</button>
     </form>
   </div>
@@ -382,6 +402,7 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
         llm_api_base_url = llm_api_base_url,
         llm_api_model = llm_api_model,
         llm_api_key = llm_api_key,
+        database_url = database_url,
         toast_html = toast_html,
     );
 
@@ -398,11 +419,16 @@ pub async fn save_setup(
     let llm_api_base_url = form.llm_api_base_url.as_deref().unwrap_or("").to_string();
     let llm_api_model = form.llm_api_model.as_deref().unwrap_or("").to_string();
     let llm_api_key = form.llm_api_key.as_deref().unwrap_or("").to_string();
+    let database_url = form.database_url.as_deref().unwrap_or("").trim().to_string();
+    let db_invalid = !database_url.is_empty()
+        && !database_url.starts_with("postgres://")
+        && !database_url.starts_with("postgresql://");
 
     let new_tg = form.telegram_bot_token.as_deref().unwrap_or("").trim().to_string();
     let new_prompt = form.system_prompt.as_deref().unwrap_or("").to_string();
     let _ = write_system_prompt(&new_prompt);
 
+    let db_to_write = if db_invalid { String::new() } else { database_url.clone() };
     let _ = write_env_file(
         &form.page_access_token,
         if new_tg.is_empty() { None } else { Some(new_tg.as_str()) },
@@ -411,9 +437,12 @@ pub async fn save_setup(
       &llm_api_base_url,
       &llm_api_model,
       &llm_api_key,
+      &db_to_write,
     );
 
-    let toast = if new_tg != previous_tg {
+    let toast = if db_invalid {
+        "db_bad"
+    } else if new_tg != previous_tg {
         if !new_tg.is_empty() {
             if !validate_telegram_token(&new_tg).await {
                 println!("⚠️  Setup: invalid Telegram token submitted — bot not started");
