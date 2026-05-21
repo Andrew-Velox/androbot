@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::config::DEFAULT_LLM_URL;
 use crate::services::database;
 use crate::services::env_store::{read_env_value, read_system_prompt};
+use crate::services::rag;
 
 use serde_json::Value;
 
@@ -54,6 +55,20 @@ fn current_datetime_string() -> String {
 async fn build_messages(prompt: &str, db_url: Option<&str>) -> Vec<serde_json::Value> {
     let mut system_prompt = read_system_prompt().trim().to_string();
     let datetime = current_datetime_string();
+
+    let snippets = rag::retrieve_default(prompt);
+    if !snippets.is_empty() {
+        if !system_prompt.is_empty() {
+            system_prompt.push_str("\n\n");
+        }
+        system_prompt.push_str(
+            "Reference snippets retrieved from the uploaded file (these are the most relevant \
+             sections for the customer's question — quote details verbatim when relevant):\n",
+        );
+        for (i, snip) in snippets.iter().enumerate() {
+            system_prompt.push_str(&format!("\n[{}]\n{}\n", i + 1, snip));
+        }
+    }
 
     if let Some(url) = db_url {
         let schema = database::get_or_fetch_schema(url).await;

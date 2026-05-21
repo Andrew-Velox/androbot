@@ -10,6 +10,8 @@ LLM_API_BASE_URL=
 LLM_API_MODEL=
 LLM_API_KEY=
 DATABASE_URL=
+DATABASE_ALLOWED_TABLES=
+DATABASE_BLOCKED_COLUMNS=password,secret,token,api_key,hash
 EOF
   echo "Created .env with defaults. Open /setup to add tokens."
 fi

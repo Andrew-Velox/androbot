@@ -1,5 +1,6 @@
 use axum::{
-    routing::get,
+    extract::DefaultBodyLimit,
+    routing::{get, post},
     Router,
 };
 use dotenvy::dotenv;
@@ -47,6 +48,8 @@ async fn main() {
     let app = Router::new()
         .route("/webhook", get(routes::webhook::verify_webhook).post(routes::webhook::handle_incoming_message))
         .route("/setup", get(routes::setup::setup_page).post(routes::setup::save_setup))
+        .route("/setup/upload", post(routes::setup::upload_context).layer(DefaultBodyLimit::max(10 * 1024 * 1024)))
+        .route("/setup/delete-upload", post(routes::setup::delete_upload))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();

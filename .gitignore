@@ -4,3 +4,4 @@
 .env.termux
 .env.*
 !.env.example
+/context

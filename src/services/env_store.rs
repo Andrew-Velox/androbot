@@ -37,6 +37,8 @@ pub fn write_env_file(
     llm_api_model: &str,
     llm_api_key: &str,
     database_url: &str,
+    database_allowed_tables: &str,
+    database_blocked_columns: &str,
 ) -> std::io::Result<()> {
     let mut content = String::new();
     content.push_str(&format!("PAGE_ACCESS_TOKEN={}\n", page_access_token));
@@ -62,6 +64,8 @@ pub fn write_env_file(
     content.push_str(&format!("LLM_API_MODEL={}\n", llm_api_model.trim()));
     content.push_str(&format!("LLM_API_KEY={}\n", llm_api_key.trim()));
     content.push_str(&format!("DATABASE_URL={}\n", database_url.trim()));
+    content.push_str(&format!("DATABASE_ALLOWED_TABLES={}\n", database_allowed_tables.trim()));
+    content.push_str(&format!("DATABASE_BLOCKED_COLUMNS={}\n", database_blocked_columns.trim()));
 
     fs::write(".env", content)
 }

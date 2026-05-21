@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum = "0.8.9"
+axum = { version = "0.8.9", features = ["multipart"] }
+calamine = "0.30"
 dotenvy = "0.15.7"
 reqwest = { version = "0.13.3", default-features = false, features = ["json", "native-tls"] }
 serde = { version = "1.0.228", features = ["derive"] }
