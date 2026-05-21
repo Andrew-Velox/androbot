@@ -33,6 +33,9 @@ pub fn write_env_file(
     telegram_bot_token: Option<&str>,
     llm_url: &str,
     bind_addr: &str,
+    llm_api_base_url: &str,
+    llm_api_model: &str,
+    llm_api_key: &str,
 ) -> std::io::Result<()> {
     let mut content = String::new();
     content.push_str(&format!("PAGE_ACCESS_TOKEN={}\n", page_access_token));
@@ -53,6 +56,10 @@ pub fn write_env_file(
     };
     content.push_str(&format!("LLM_URL={}\n", llm_url));
     content.push_str(&format!("BIND_ADDR={}\n", bind_addr));
+
+    content.push_str(&format!("LLM_API_BASE_URL={}\n", llm_api_base_url.trim()));
+    content.push_str(&format!("LLM_API_MODEL={}\n", llm_api_model.trim()));
+    content.push_str(&format!("LLM_API_KEY={}\n", llm_api_key.trim()));
 
     fs::write(".env", content)
 }

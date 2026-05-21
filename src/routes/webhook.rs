@@ -6,7 +6,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{AppState, config::VERIFY_TOKEN};
-use crate::services::{facebook::send_facebook_message, llm::query_local_llm};
+use crate::services::{facebook::send_facebook_message, llm::query_llm};
 
 // Meta verification struct
 #[derive(Deserialize)]
@@ -32,7 +32,7 @@ pub async fn verify_webhook(Query(params): Query<VerifyQuery>) -> impl IntoRespo
 
 // 2. Incoming Message Endpoint
 pub async fn handle_incoming_message(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     body: String,
 ) -> impl axum::response::IntoResponse {
     println!("🚨 META POST RECEIVED!");
@@ -65,7 +65,7 @@ pub async fn handle_incoming_message(
 
             if let (Some(sender_id), Some(text)) = (sender_id, text) {
                 println!("Incoming text from {}: {}", sender_id, text);
-                let reply = query_local_llm(&state.llm_url, text).await;
+                let reply = query_llm(text).await;
                 if let Err(err) = send_facebook_message(sender_id, &reply).await {
                     println!("Failed to send reply: {}", err);
                 }

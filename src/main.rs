@@ -11,12 +11,11 @@ mod config;
 mod routes;
 mod services;
 
-use config::{DEFAULT_BIND_ADDR, DEFAULT_LLM_URL, SETUP_URL};
+use config::{DEFAULT_BIND_ADDR, SETUP_URL};
 use services::telegram::{run_telegram_bot, validate_telegram_token};
 
 #[derive(Clone)]
 pub struct AppState {
-    pub llm_url: String,
     pub telegram_task: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
@@ -24,8 +23,6 @@ pub struct AppState {
 async fn main() {
     dotenv().ok();
 
-    let llm_url = env::var("LLM_URL")
-        .unwrap_or_else(|_| DEFAULT_LLM_URL.to_string());
     let bind_addr = env::var("BIND_ADDR")
         .unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
 
@@ -33,9 +30,8 @@ async fn main() {
 
     let tg_status = if let Ok(token) = env::var("TELEGRAM_BOT_TOKEN") {
         if validate_telegram_token(&token).await {
-            let llm = llm_url.clone();
             let handle = tokio::spawn(async move {
-                run_telegram_bot(token, llm).await;
+                run_telegram_bot(token).await;
             });
             *telegram_task.lock().await = Some(handle);
             "✅ running"
@@ -46,7 +42,7 @@ async fn main() {
         "—  not configured"
     };
 
-    let state = AppState { llm_url, telegram_task };
+    let state = AppState { telegram_task };
 
     let app = Router::new()
         .route("/webhook", get(routes::webhook::verify_webhook).post(routes::webhook::handle_incoming_message))

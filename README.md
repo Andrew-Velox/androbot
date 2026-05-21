@@ -1,6 +1,6 @@
 # Androbot (Termux Friendly)
 
-This project runs a Meta webhook server and forwards messages to a local LLM HTTP server (llama.cpp).
+This project runs a Meta webhook server and forwards messages to a local LLM HTTP server (llama.cpp) or an OpenAI-compatible API.
 
 
 ## First-Time Setup (Termux)
@@ -38,7 +38,7 @@ Optional web setup (after the server is running):
 http://127.0.0.1:3000/setup
 ```
 
-This page lets you set `PAGE_ACCESS_TOKEN` and `TELEGRAM_BOT_TOKEN` without editing files.
+This page lets you set `PAGE_ACCESS_TOKEN`, `TELEGRAM_BOT_TOKEN`, and optional LLM API settings without editing files.
 
 Optional: add Telegram by setting `TELEGRAM_BOT_TOKEN` in `.env` (from @BotFather). If set, the bot runs alongside Facebook and uses the same LLM.
 
@@ -85,6 +85,18 @@ https://YOUR_TUNNEL_URL/webhook
 ```
 
 Telegram note: if `TELEGRAM_BOT_TOKEN` is set, the Telegram bot will start automatically when you run `./scripts/run.sh`.
+
+## Optional: Use an API Instead of Local GGUF
+
+If you want to skip the local GGUF model and use a hosted API instead, set these in the setup page or `.env`:
+
+```
+LLM_API_BASE_URL=https://api.openai.com/v1
+LLM_API_MODEL=gpt-4o-mini
+LLM_API_KEY=your-key
+```
+
+When `LLM_API_KEY` is set, the API is used and the local `LLM_URL` is ignored.
 
 ## Notes
 

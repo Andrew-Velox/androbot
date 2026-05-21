@@ -1,6 +1,6 @@
 use teloxide::prelude::*;
 
-use crate::services::llm::query_local_llm;
+use crate::services::llm::query_llm;
 
 pub async fn validate_telegram_token(token: &str) -> bool {
     let url = format!("https://api.telegram.org/bot{}/getMe", token);
@@ -15,15 +15,14 @@ pub async fn validate_telegram_token(token: &str) -> bool {
     }
 }
 
-pub async fn run_telegram_bot(token: String, llm_url: String) {
+pub async fn run_telegram_bot(token: String) {
     let bot = Bot::new(token);
     println!("✅ Telegram bot started");
 
     teloxide::repl(bot, move |message: Message, bot: Bot| {
-        let llm_url = llm_url.clone();
         async move {
             if let Some(text) = message.text() {
-                let reply = query_local_llm(&llm_url, text).await;
+                let reply = query_llm(text).await;
                 bot.send_message(message.chat.id, reply).await?;
             }
             respond(())

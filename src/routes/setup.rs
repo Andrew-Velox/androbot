@@ -11,6 +11,9 @@ pub struct SetupForm {
     page_access_token: String,
     telegram_bot_token: Option<String>,
     system_prompt: Option<String>,
+  llm_api_base_url: Option<String>,
+  llm_api_model: Option<String>,
+  llm_api_key: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -22,6 +25,9 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
     let page_access_token = read_env_value("PAGE_ACCESS_TOKEN").unwrap_or_default();
     let telegram_bot_token = read_env_value("TELEGRAM_BOT_TOKEN").unwrap_or_default();
     let system_prompt = read_system_prompt();
+    let llm_api_base_url = read_env_value("LLM_API_BASE_URL").unwrap_or_default();
+    let llm_api_model = read_env_value("LLM_API_MODEL").unwrap_or_default();
+    let llm_api_key = read_env_value("LLM_API_KEY").unwrap_or_default();
 
     let toast_html = match q.toast.as_deref() {
         Some("saved")      => r#"<div class="toast">&#10003;&nbsp; Configuration saved</div>"#,
@@ -251,6 +257,66 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
     <form method="post" action="/setup" autocomplete="off">
 
       <div class="field">
+        <label for="api_key">
+          LLM API Key
+          <span class="badge badge-optional">Optional</span>
+        </label>
+        <p class="field-desc">If set, Groq API is used and the local GGUF model is skipped.</p>
+        <input
+          id="api_key"
+          name="llm_api_key"
+          type="password"
+          value="{llm_api_key}"
+          placeholder="sk-..."
+          spellcheck="false"
+          autocomplete="off"
+        >
+      </div>
+
+      <details class="field">
+        <summary style="cursor:pointer; color:#94a3b8; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; font-size:0.8rem;">
+          Advanced API Settings
+        </summary>
+        <div style="margin-top:1rem;">
+          <div class="field">
+            <label for="api_base">
+              LLM API Base URL
+              <span class="badge badge-optional">Optional</span>
+            </label>
+            <p class="field-desc">OpenAI-compatible base URL. Example: https://api.openai.com/v1 or https://api.groq.com/openai/v1</p>
+            <input
+              id="api_base"
+              name="llm_api_base_url"
+              type="text"
+              value="{llm_api_base_url}"
+              placeholder="https://api.groq.com/openai/v1"
+              spellcheck="false"
+              autocomplete="off"
+            >
+          </div>
+
+          <div class="field">
+            <label for="api_model">
+              LLM API Model
+              <span class="badge badge-optional">Optional</span>
+            </label>
+            <p class="field-desc">Model name for your provider. Example: llama3-8b-8192.</p>
+            <input
+              id="api_model"
+              name="llm_api_model"
+              type="text"
+              value="{llm_api_model}"
+              placeholder="llama3-8b-8192"
+              spellcheck="false"
+              autocomplete="off"
+            >
+          </div>
+        </div>
+      </details>
+
+      <hr class="divider">
+
+      <div class="field">
         <label for="pat">
           Facebook Page Access Token
           <span class="badge badge-optional">Optional</span>
@@ -295,8 +361,6 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
         >{system_prompt}</textarea>
       </div>
 
-      
-
       <button type="submit">Save Configuration</button>
     </form>
   </div>
@@ -315,6 +379,9 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
         page_token = page_access_token,
         tg_token = telegram_bot_token,
         system_prompt = system_prompt,
+        llm_api_base_url = llm_api_base_url,
+        llm_api_model = llm_api_model,
+        llm_api_key = llm_api_key,
         toast_html = toast_html,
     );
 
@@ -328,6 +395,9 @@ pub async fn save_setup(
     let previous_tg = read_env_value("TELEGRAM_BOT_TOKEN").unwrap_or_default();
     let llm_url = read_env_value("LLM_URL").unwrap_or_else(|| DEFAULT_LLM_URL.to_string());
     let bind_addr = read_env_value("BIND_ADDR").unwrap_or_else(|| DEFAULT_BIND_ADDR.to_string());
+    let llm_api_base_url = form.llm_api_base_url.as_deref().unwrap_or("").to_string();
+    let llm_api_model = form.llm_api_model.as_deref().unwrap_or("").to_string();
+    let llm_api_key = form.llm_api_key.as_deref().unwrap_or("").to_string();
 
     let new_tg = form.telegram_bot_token.as_deref().unwrap_or("").trim().to_string();
     let new_prompt = form.system_prompt.as_deref().unwrap_or("").to_string();
@@ -338,6 +408,9 @@ pub async fn save_setup(
         if new_tg.is_empty() { None } else { Some(new_tg.as_str()) },
         &llm_url,
         &bind_addr,
+      &llm_api_base_url,
+      &llm_api_model,
+      &llm_api_key,
     );
 
     let toast = if new_tg != previous_tg {
@@ -350,10 +423,9 @@ pub async fn save_setup(
                 if let Some(handle) = task.take() {
                     handle.abort();
                 }
-                let llm_url = state.llm_url.clone();
                 let token = new_tg.clone();
                 *task = Some(tokio::spawn(async move {
-                    run_telegram_bot(token, llm_url).await;
+                  run_telegram_bot(token).await;
                 }));
                 if previous_tg.is_empty() { "tg_started" } else { "tg_updated" }
             }
