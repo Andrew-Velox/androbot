@@ -34,6 +34,7 @@ To connect a Facebook Page, expose the webhook publicly with one of the tunnel s
 
 ```bash
 ./scripts/tunnel-cf.sh         # Cloudflare quick tunnel
+
 # if that doesn't work (some networks block Cloudflare), try:
 ./scripts/tunnel-pinggy.sh     # SSH over port 443 (bypasses most firewalls)
 ./scripts/tunnel-ng.sh         # ngrok fallback
