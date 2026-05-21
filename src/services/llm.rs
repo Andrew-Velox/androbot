@@ -1,60 +1,35 @@
 use reqwest::Client;
-use serde_json::json;
-use std::time::{SystemTime, UNIX_EPOCH};
+use serde_json::{json, Value};
 
 use crate::config::DEFAULT_LLM_URL;
 use crate::services::database;
 use crate::services::env_store::{read_env_value, read_system_prompt};
 use crate::services::rag;
 
-use serde_json::Value;
-
 const MAX_TOOL_ITERATIONS: usize = 3;
-
 const DEFAULT_API_BASE_URL: &str = "https://api.groq.com/openai/v1";
 const DEFAULT_API_MODEL: &str = "llama-3.1-8b-instant";
 
-fn current_datetime_string() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    let days_since_epoch = secs / 86400;
-    let time_of_day = secs % 86400;
-    let hour = time_of_day / 3600;
-    let minute = (time_of_day % 3600) / 60;
-    let second = time_of_day % 60;
-
-    // Compute year/month/day from days since Unix epoch
-    let mut remaining = days_since_epoch;
-    let mut year = 1970u64;
-    loop {
-        let days_in_year = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 366 } else { 365 };
-        if remaining < days_in_year { break; }
-        remaining -= days_in_year;
-        year += 1;
+fn env_or(key: &str, default: &str) -> String {
+    match read_env_value(key) {
+        Some(v) if !v.trim().is_empty() => v.trim().to_string(),
+        _ => default.to_string(),
     }
-    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
-    let month_days = [31u64, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    let month_names = ["January","February","March","April","May","June",
-                       "July","August","September","October","November","December"];
-    let mut month = 0usize;
-    for (i, &d) in month_days.iter().enumerate() {
-        if remaining < d { month = i; break; }
-        remaining -= d;
-    }
-    let day = remaining + 1;
-
-    format!(
-        "{} {:02}, {} {:02}:{:02}:{:02} UTC",
-        month_names[month], day, year, hour, minute, second
-    )
 }
 
-async fn build_messages(prompt: &str, db_url: Option<&str>) -> Vec<serde_json::Value> {
+fn env_opt(key: &str) -> Option<String> {
+    read_env_value(key).and_then(|v| {
+        let trimmed = v.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+async fn build_messages(prompt: &str, db_url: Option<&str>) -> Vec<Value> {
     let mut system_prompt = read_system_prompt().trim().to_string();
-    let datetime = current_datetime_string();
 
     let snippets = rag::retrieve_default(prompt);
     if !snippets.is_empty() {
@@ -89,86 +64,8 @@ async fn build_messages(prompt: &str, db_url: Option<&str>) -> Vec<serde_json::V
     if !system_prompt.is_empty() {
         messages.push(json!({"role": "system", "content": system_prompt}));
     }
-
-    let user_content = format!("[Current date and time: {}]\n{}", datetime, prompt);
-    messages.push(json!({"role": "user", "content": user_content}));
+    messages.push(json!({"role": "user", "content": prompt}));
     messages
-}
-
-async fn query_openai_compat(
-    api_base_url: &str,
-    api_key: &str,
-    api_model: &str,
-    db_url: Option<&str>,
-    mut messages: Vec<serde_json::Value>,
-) -> String {
-    let base = api_base_url.trim().trim_end_matches('/');
-    if base.is_empty() {
-        return "Error: LLM_API_BASE_URL is empty. Set it to your provider base URL (e.g. https://api.openai.com/v1).".to_string();
-    }
-    if api_model.trim().is_empty() {
-        return "Error: LLM_API_MODEL is required when using an API key.".to_string();
-    }
-
-    let url = format!("{}/chat/completions", base);
-    let tools_schema = build_tools_schema(db_url.is_some());
-    let client = Client::new();
-
-    for _ in 0..=MAX_TOOL_ITERATIONS {
-        let mut payload = json!({
-            "model": api_model.trim(),
-            "messages": messages,
-            "temperature": 0.7,
-            "max_tokens": 400
-        });
-        if let Some(schema) = &tools_schema {
-            payload["tools"] = schema.clone();
-        }
-
-        let res = client
-            .post(&url)
-            .bearer_auth(api_key.trim())
-            .json(&payload)
-            .send()
-            .await;
-
-        let response = match res {
-            Ok(r) => r,
-            Err(e) => return format!("Error: Failed to reach the LLM API. ({})", e),
-        };
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-
-        let parsed: serde_json::Value = match serde_json::from_str(&body) {
-            Ok(v) => v,
-            Err(_) => return format!(
-                "Error: I received a response, but couldn't parse the text. (status: {}, body: {})",
-                status, body
-            ),
-        };
-
-        if let Some(err_msg) = parsed["error"]["message"].as_str() {
-            return format!("Error: {}", err_msg);
-        }
-
-        let message = &parsed["choices"][0]["message"];
-        let tool_calls = message["tool_calls"].as_array().cloned().unwrap_or_default();
-
-        if tool_calls.is_empty() {
-            if let Some(content) = message["content"].as_str() {
-                return content.to_string();
-            }
-            return format!(
-                "Error: response missing content. (status: {}, body: {})",
-                status, body
-            );
-        }
-
-        messages.push(message.clone());
-        run_tool_calls(&tool_calls, db_url, &mut messages).await;
-    }
-
-    "Error: tool-call loop exceeded maximum iterations.".to_string()
 }
 
 fn build_tools_schema(has_db: bool) -> Option<Value> {
@@ -194,20 +91,16 @@ fn build_tools_schema(has_db: bool) -> Option<Value> {
     }]))
 }
 
-async fn run_tool_calls(
-    tool_calls: &[Value],
-    db_url: Option<&str>,
-    messages: &mut Vec<Value>,
-) {
+async fn run_tool_calls(tool_calls: &[Value], db_url: Option<&str>, messages: &mut Vec<Value>) {
     for call in tool_calls {
         let id = call["id"].as_str().unwrap_or("").to_string();
-        let name = call["function"]["name"].as_str().unwrap_or("").to_string();
-        let args = call["function"]["arguments"].as_str().unwrap_or("{}").to_string();
+        let name = call["function"]["name"].as_str().unwrap_or("");
+        let args = call["function"]["arguments"].as_str().unwrap_or("{}");
 
         let result = if name == "query_database" {
             match db_url {
                 Some(url) => {
-                    let parsed: Value = serde_json::from_str(&args).unwrap_or(Value::Null);
+                    let parsed: Value = serde_json::from_str(args).unwrap_or(Value::Null);
                     let sql = parsed["sql"].as_str().unwrap_or("");
                     println!("→ db: {}", sql);
                     database::execute_query(url, sql).await
@@ -218,15 +111,90 @@ async fn run_tool_calls(
             format!("Error: unknown tool '{}'", name)
         };
 
-        messages.push(json!({
-            "role": "tool",
-            "tool_call_id": id,
-            "content": result
-        }));
+        messages.push(json!({"role": "tool", "tool_call_id": id, "content": result}));
     }
 }
 
-async fn query_local_llm(llm_url: &str, messages: Vec<serde_json::Value>) -> String {
+async fn query_openai_compat(
+    api_base_url: &str,
+    api_key: &str,
+    api_model: &str,
+    db_url: Option<&str>,
+    mut messages: Vec<Value>,
+) -> String {
+    let base = api_base_url.trim().trim_end_matches('/');
+    if base.is_empty() {
+        return "Error: LLM_API_BASE_URL is empty.".to_string();
+    }
+    if api_model.trim().is_empty() {
+        return "Error: LLM_API_MODEL is required when using an API key.".to_string();
+    }
+
+    let url = format!("{}/chat/completions", base);
+    let tools_schema = build_tools_schema(db_url.is_some());
+    let client = Client::new();
+
+    for _ in 0..=MAX_TOOL_ITERATIONS {
+        let mut payload = json!({
+            "model": api_model.trim(),
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 400
+        });
+        if let Some(schema) = &tools_schema {
+            payload["tools"] = schema.clone();
+        }
+
+        let response = match client
+            .post(&url)
+            .bearer_auth(api_key.trim())
+            .json(&payload)
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => return format!("Error: Failed to reach the LLM API. ({})", e),
+        };
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        let parsed: Value = match serde_json::from_str(&body) {
+            Ok(v) => v,
+            Err(_) => {
+                return format!(
+                    "Error: couldn't parse response. (status: {}, body: {})",
+                    status, body
+                )
+            }
+        };
+
+        if let Some(err_msg) = parsed["error"]["message"].as_str() {
+            return format!("Error: {}", err_msg);
+        }
+
+        let message = &parsed["choices"][0]["message"];
+        let tool_calls = message["tool_calls"].as_array().cloned().unwrap_or_default();
+
+        if tool_calls.is_empty() {
+            return message["content"]
+                .as_str()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| {
+                    format!(
+                        "Error: response missing content. (status: {}, body: {})",
+                        status, body
+                    )
+                });
+        }
+
+        messages.push(message.clone());
+        run_tool_calls(&tool_calls, db_url, &mut messages).await;
+    }
+
+    "Error: tool-call loop exceeded maximum iterations.".to_string()
+}
+
+async fn query_local_llm(llm_url: &str, messages: Vec<Value>) -> String {
     let client = Client::new();
     let payload = json!({
         "messages": messages,
@@ -234,77 +202,40 @@ async fn query_local_llm(llm_url: &str, messages: Vec<serde_json::Value>) -> Str
         "max_tokens": 150
     });
 
-    let res = client.post(llm_url)
-        .json(&payload)
-        .send()
-        .await;
+    let response = match client.post(llm_url).json(&payload).send().await {
+        Ok(r) => r,
+        Err(e) => return format!("Error: Failed to reach the local LLM server at {}. ({})", llm_url, e),
+    };
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
 
-    match res {
-        Ok(response) => {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
-                if let Some(content) = json["choices"][0]["message"]["content"].as_str() {
-                    return content.to_string();
-                }
-                if let Some(err_msg) = json["error"]["message"].as_str() {
-                    return format!("Error: {}", err_msg);
-                }
-            }
-
-            format!(
-                "Error: I received a response, but couldn't parse the text. (status: {}, body: {})",
-                status,
-                body
-            )
+    if let Ok(json) = serde_json::from_str::<Value>(&body) {
+        if let Some(content) = json["choices"][0]["message"]["content"].as_str() {
+            return content.to_string();
         }
-        Err(e) => format!("Error: Failed to reach the local LLM server at {}. ({})", llm_url, e),
+        if let Some(err) = json["error"]["message"].as_str() {
+            return format!("Error: {}", err);
+        }
     }
+    format!("Error: couldn't parse response. (status: {}, body: {})", status, body)
 }
 
 pub async fn query_llm(prompt: &str) -> String {
-    let api_key = read_env_value("LLM_API_KEY").unwrap_or_default();
-    let db_url = read_env_value("DATABASE_URL").unwrap_or_default();
-    let db_url = if db_url.trim().is_empty() {
-        None
-    } else {
-        Some(db_url.trim().to_string())
-    };
+    let api_key = env_opt("LLM_API_KEY");
+    let db_url = env_opt("DATABASE_URL");
 
-    let use_api = !api_key.trim().is_empty();
-    let db_for_messages = if use_api { db_url.as_deref() } else { None };
+    let db_for_messages = api_key.as_ref().and(db_url.as_deref());
     let messages = build_messages(prompt, db_for_messages).await;
 
-    if use_api {
-        let api_base_url = read_env_value("LLM_API_BASE_URL")
-            .unwrap_or_else(|| DEFAULT_API_BASE_URL.to_string());
-        let api_model = read_env_value("LLM_API_MODEL")
-            .unwrap_or_else(|| DEFAULT_API_MODEL.to_string());
-        let api_base_url = if api_base_url.trim().is_empty() {
-            DEFAULT_API_BASE_URL.to_string()
-        } else {
-            api_base_url
-        };
-        let api_model = if api_model.trim().is_empty() {
-            DEFAULT_API_MODEL.to_string()
-        } else {
-            api_model
-        };
-        let reply = query_openai_compat(
-            &api_base_url,
-            &api_key,
-            &api_model,
-            db_url.as_deref(),
-            messages,
-        )
-        .await;
-        println!("LLM reply: {}", reply);
-        return reply;
-    }
+    let reply = if let Some(key) = api_key {
+        let base = env_or("LLM_API_BASE_URL", DEFAULT_API_BASE_URL);
+        let model = env_or("LLM_API_MODEL", DEFAULT_API_MODEL);
+        query_openai_compat(&base, &key, &model, db_url.as_deref(), messages).await
+    } else {
+        let url = env_or("LLM_URL", DEFAULT_LLM_URL);
+        query_local_llm(&url, messages).await
+    };
 
-    let llm_url = read_env_value("LLM_URL").unwrap_or_else(|| DEFAULT_LLM_URL.to_string());
-    let reply = query_local_llm(&llm_url, messages).await;
     println!("LLM reply: {}", reply);
     reply
 }

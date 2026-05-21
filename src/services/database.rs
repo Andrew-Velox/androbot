@@ -29,10 +29,10 @@ fn schema_cache() -> &'static Mutex<Option<(String, String)>> {
 
 async fn get_pool(url: &str) -> Result<PgPool, String> {
     let mut guard = pool_cache().lock().await;
-    if let Some((u, p)) = guard.as_ref() {
-        if u == url {
-            return Ok(p.clone());
-        }
+    if let Some((u, p)) = guard.as_ref()
+        && u == url
+    {
+        return Ok(p.clone());
     }
     let pool = PgPoolOptions::new()
         .max_connections(MAX_CONNECTIONS)
@@ -197,10 +197,10 @@ pub async fn execute_query(url: &str, sql: &str) -> String {
 pub async fn get_or_fetch_schema(url: &str) -> String {
     {
         let guard = schema_cache().lock().await;
-        if let Some((u, s)) = guard.as_ref() {
-            if u == url {
-                return s.clone();
-            }
+        if let Some((u, s)) = guard.as_ref()
+            && u == url
+        {
+            return s.clone();
         }
     }
     let s = fetch_schema(url).await;
@@ -226,27 +226,22 @@ async fn fetch_schema(url: &str) -> String {
     let allowed_tables = parse_csv_env("DATABASE_ALLOWED_TABLES");
     let blocked_cols = parse_csv_env("DATABASE_BLOCKED_COLUMNS");
 
-    let fut: std::pin::Pin<Box<dyn std::future::Future<Output = _> + Send>> = if allowed_tables.is_empty() {
-        Box::pin(sqlx::query(
-            "SELECT table_name, column_name, data_type \
-             FROM information_schema.columns \
-             WHERE table_schema = 'public' \
-             ORDER BY table_name, ordinal_position \
-             LIMIT 500",
-        ).fetch_all(&pool))
+    let base_sql = "SELECT table_name, column_name, data_type \
+                    FROM information_schema.columns \
+                    WHERE table_schema = 'public'";
+    let order = "ORDER BY table_name, ordinal_position LIMIT 500";
+    let (sql, with_filter) = if allowed_tables.is_empty() {
+        (format!("{} {}", base_sql, order), false)
     } else {
-        Box::pin(sqlx::query(
-            "SELECT table_name, column_name, data_type \
-             FROM information_schema.columns \
-             WHERE table_schema = 'public' AND table_name = ANY($1) \
-             ORDER BY table_name, ordinal_position \
-             LIMIT 500",
-        )
-        .bind(&allowed_tables)
-        .fetch_all(&pool))
+        (format!("{} AND table_name = ANY($1) {}", base_sql, order), true)
     };
 
-    let rows = match timeout(Duration::from_secs(QUERY_TIMEOUT_SECS), fut).await {
+    let mut q = sqlx::query(&sql);
+    if with_filter {
+        q = q.bind(&allowed_tables);
+    }
+
+    let rows = match timeout(Duration::from_secs(QUERY_TIMEOUT_SECS), q.fetch_all(&pool)).await {
         Ok(Ok(r)) => r,
         Ok(Err(e)) => return format!("(schema fetch failed: {})", e),
         Err(_) => return "(schema fetch timed out)".into(),

@@ -516,19 +516,19 @@ pub async fn save_setup(
     let new_prompt = form.system_prompt.as_deref().unwrap_or("").to_string();
     let _ = write_system_prompt(&new_prompt);
 
-    let db_to_write = if db_invalid { String::new() } else { database_url.clone() };
-    let _ = write_env_file(
-        &form.page_access_token,
-        if new_tg.is_empty() { None } else { Some(new_tg.as_str()) },
-        &llm_url,
-        &bind_addr,
-      &llm_api_base_url,
-      &llm_api_model,
-      &llm_api_key,
-      &db_to_write,
-      &database_allowed_tables,
-      &database_blocked_columns,
-    );
+    let db_to_write = if db_invalid { "" } else { database_url.as_str() };
+    let _ = write_env_file(&[
+        ("PAGE_ACCESS_TOKEN", form.page_access_token.as_str()),
+        ("TELEGRAM_BOT_TOKEN", new_tg.as_str()),
+        ("LLM_URL", llm_url.as_str()),
+        ("BIND_ADDR", bind_addr.as_str()),
+        ("LLM_API_BASE_URL", llm_api_base_url.trim()),
+        ("LLM_API_MODEL", llm_api_model.trim()),
+        ("LLM_API_KEY", llm_api_key.trim()),
+        ("DATABASE_URL", db_to_write),
+        ("DATABASE_ALLOWED_TABLES", database_allowed_tables.as_str()),
+        ("DATABASE_BLOCKED_COLUMNS", database_blocked_columns.as_str()),
+    ]);
 
     let toast = if db_invalid {
         "db_bad"

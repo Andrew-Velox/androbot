@@ -21,11 +21,13 @@ pub struct VerifyQuery {
 
 // 1. Meta Verification Endpoint
 pub async fn verify_webhook(Query(params): Query<VerifyQuery>) -> impl IntoResponse {
-    if let (Some(mode), Some(token), Some(challenge)) = (params.mode, params.token, params.challenge) {
-        if mode == "subscribe" && token == VERIFY_TOKEN {
-            println!("✅ Webhook Verified by Meta!");
-            return challenge;
-        }
+    if let (Some(mode), Some(token), Some(challenge)) =
+        (params.mode, params.token, params.challenge)
+        && mode == "subscribe"
+        && token == VERIFY_TOKEN
+    {
+        println!("✅ Webhook Verified by Meta!");
+        return challenge;
     }
     "Forbidden".to_string()
 }

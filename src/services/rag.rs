@@ -28,7 +28,6 @@ struct Index {
 struct Info {
     filename: String,
     n_chunks: usize,
-    source_chars: usize,
 }
 
 fn ensure_dir() {
@@ -40,17 +39,11 @@ fn cache() -> &'static Mutex<Option<Index>> {
     C.get_or_init(|| Mutex::new(None))
 }
 
-fn invalidate_cache() {
-    if let Ok(mut g) = cache().lock() {
-        *g = None;
-    }
-}
-
 fn load_index() -> Option<Index> {
-    if let Ok(g) = cache().lock() {
-        if let Some(i) = g.as_ref() {
-            return Some(i.clone());
-        }
+    if let Ok(g) = cache().lock()
+        && let Some(i) = g.as_ref()
+    {
+        return Some(i.clone());
     }
     let raw = fs::read_to_string(INDEX_FILE).ok()?;
     let idx: Index = serde_json::from_str(&raw).ok()?;
@@ -69,7 +62,9 @@ pub fn info() -> Option<(String, usize)> {
 pub fn clear() {
     let _ = fs::remove_file(INDEX_FILE);
     let _ = fs::remove_file(INFO_FILE);
-    invalidate_cache();
+    if let Ok(mut g) = cache().lock() {
+        *g = None;
+    }
 }
 
 pub fn extract_text(filename: &str, bytes: &[u8]) -> Result<String, String> {
@@ -204,7 +199,6 @@ pub fn build_index(filename: &str, text: &str) -> Result<usize, String> {
     let info = Info {
         filename: filename.to_string(),
         n_chunks,
-        source_chars: text.len(),
     };
     let info_json = serde_json::to_string(&info).map_err(|e| e.to_string())?;
     fs::write(INFO_FILE, info_json).map_err(|e| e.to_string())?;
