@@ -3,5 +3,5 @@
 .env.local
 .env.termux
 .env.*
-!.env.example
+.env.example
 /context
