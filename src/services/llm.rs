@@ -168,7 +168,10 @@ async fn query_openai_compat(
             }
         };
 
-        if let Some(err_msg) = parsed["error"]["message"].as_str() {
+        let err_msg = parsed["error"]["message"]
+            .as_str()
+            .or_else(|| parsed[0]["error"]["message"].as_str());
+        if let Some(err_msg) = err_msg {
             return format!("Error: {}", err_msg);
         }
 

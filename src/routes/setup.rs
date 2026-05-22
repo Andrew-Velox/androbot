@@ -287,11 +287,27 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
     <form method="post" action="/setup" autocomplete="off">
 
       <div class="field">
+        <label for="provider">LLM Provider</label>
+        <p class="field-desc">Pick a provider to auto-fill the URL and model suggestions. Choose Custom for anything else.</p>
+        <select
+          id="provider"
+          style="width:100%; padding:0.75rem 1rem; background:#0f1117; border:1px solid #2d3148; border-radius:8px; color:#e2e8f0; font-size:0.95rem; font-family:'Courier New', monospace; outline:none;"
+        >
+          <option value="">— Custom —</option>
+          <option value="groq">Groq</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="openai">OpenAI</option>
+          <option value="together">Together AI</option>
+          <option value="deepseek">DeepSeek</option>
+        </select>
+      </div>
+
+      <div class="field">
         <label for="api_key">
           LLM API Key
           <span class="badge badge-optional">Optional</span>
         </label>
-        <p class="field-desc">If set, Groq API is used and the local GGUF model is skipped.</p>
+        <p class="field-desc">Paste your key — the provider above will auto-detect from common prefixes.</p>
         <input
           id="api_key"
           name="llm_api_key"
@@ -303,40 +319,38 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
         >
       </div>
 
+      <div class="field">
+        <label for="api_model">
+          LLM API Model
+          <span class="badge badge-optional">Optional</span>
+        </label>
+        <p class="field-desc">Pick from suggestions or type any model name your provider supports.</p>
+        <input
+          id="api_model"
+          name="llm_api_model"
+          type="text"
+          value="{llm_api_model}"
+          placeholder="select provider above to see suggestions"
+          list="model_suggestions"
+          spellcheck="false"
+          autocomplete="off"
+        >
+        <datalist id="model_suggestions"></datalist>
+      </div>
+
       <details class="field">
         <summary style="cursor:pointer; color:#94a3b8; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; font-size:0.8rem;">
-          Advanced API Settings
+          Advanced: Override API Base URL
         </summary>
         <div style="margin-top:1rem;">
           <div class="field">
-            <label for="api_base">
-              LLM API Base URL
-              <span class="badge badge-optional">Optional</span>
-            </label>
-            <p class="field-desc">OpenAI-compatible base URL. Example: https://api.openai.com/v1 or https://api.groq.com/openai/v1</p>
+            <p class="field-desc">Auto-filled from the provider above. Override only if you use a proxy or non-standard endpoint.</p>
             <input
               id="api_base"
               name="llm_api_base_url"
               type="text"
               value="{llm_api_base_url}"
               placeholder="https://api.groq.com/openai/v1"
-              spellcheck="false"
-              autocomplete="off"
-            >
-          </div>
-
-          <div class="field">
-            <label for="api_model">
-              LLM API Model
-              <span class="badge badge-optional">Optional</span>
-            </label>
-            <p class="field-desc">Model name for your provider. Example: llama3-8b-8192.</p>
-            <input
-              id="api_model"
-              name="llm_api_model"
-              type="text"
-              value="{llm_api_model}"
-              placeholder="llama3-8b-8192"
               spellcheck="false"
               autocomplete="off"
             >
@@ -454,18 +468,20 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
 
     <hr class="divider" style="margin-top:2rem;">
 
-    <form method="post" action="/setup/upload" enctype="multipart/form-data" class="field" style="margin-bottom:0;">
+    <div class="field" style="margin-bottom:0;">
       <label for="ctxfile">
         Store File
         <span class="badge badge-optional">Optional</span>
       </label>
       <p class="field-desc">Upload a product list, FAQ, or any reference file. Indexed with BM25 — AI retrieves the most relevant snippets per question. Supports .txt, .md, .csv, .tsv, .json, .xlsx, .xls, .ods. Max 10 MB.</p>
       {upload_status_html}
-      <div style="display:flex; gap:0.5rem;">
-        <input id="ctxfile" name="file" type="file" accept=".txt,.md,.csv,.tsv,.json,.xlsx,.xls,.ods" style="flex:1; color:#94a3b8;" required>
-        <button type="submit" style="background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:8px;color:#fff;padding:0 1rem;font-weight:600;cursor:pointer;">Upload</button>
-      </div>
-    </form>
+      <form method="post" action="/setup/upload" enctype="multipart/form-data">
+        <div style="display:flex; gap:0.5rem;">
+          <input id="ctxfile" name="file" type="file" accept=".txt,.md,.csv,.tsv,.json,.xlsx,.xls,.ods" style="flex:1; color:#94a3b8;" required>
+          <button type="submit" style="background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:8px;color:#fff;padding:0 1rem;font-weight:600;cursor:pointer;">Upload</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   {toast_html}
@@ -476,6 +492,90 @@ pub async fn setup_page(Query(q): Query<SetupQuery>) -> Html<String> {
       history.replaceState(null, '', '/setup');
       setTimeout(() => t.remove(), 3400);
     }}
+
+    const PRESETS = {{
+      groq: {{
+        base: 'https://api.groq.com/openai/v1',
+        models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it']
+      }},
+      gemini: {{
+        base: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        models: ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-pro']
+      }},
+      openai: {{
+        base: 'https://api.openai.com/v1',
+        models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo']
+      }},
+      together: {{
+        base: 'https://api.together.xyz/v1',
+        models: ['meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Llama-3.1-8B-Instruct-Turbo', 'mistralai/Mixtral-8x7B-Instruct-v0.1']
+      }},
+      deepseek: {{
+        base: 'https://api.deepseek.com/v1',
+        models: ['deepseek-chat', 'deepseek-reasoner']
+      }}
+    }};
+
+    const providerEl = document.getElementById('provider');
+    const baseEl = document.getElementById('api_base');
+    const modelEl = document.getElementById('api_model');
+    const keyEl = document.getElementById('api_key');
+    const dlist = document.getElementById('model_suggestions');
+
+    function updateDatalist(p) {{
+      const cfg = PRESETS[p];
+      if (!cfg) {{ dlist.innerHTML = ''; return; }}
+      dlist.innerHTML = cfg.models.map(m => `<option value="${{m}}">`).join('');
+    }}
+
+    function applyProvider(p, opts) {{
+      opts = opts || {{}};
+      const cfg = PRESETS[p];
+      updateDatalist(p);
+      if (!cfg) return;
+      if (opts.overwriteBase || !baseEl.value.trim()) baseEl.value = cfg.base;
+      if (opts.overwriteModel || !modelEl.value.trim()) modelEl.value = cfg.models[0];
+    }}
+
+    function detectFromKey(key) {{
+      key = (key || '').trim();
+      if (!key) return null;
+      if (key.startsWith('gsk_')) return 'groq';
+      if (key.startsWith('AIza')) return 'gemini';
+      if (key.startsWith('sk-ant')) return null; // Anthropic not OpenAI-compatible
+      if (key.startsWith('sk-')) {{
+        // could be OpenAI, DeepSeek, Together, etc. — default to OpenAI
+        return 'openai';
+      }}
+      return null;
+    }}
+
+    function guessFromBase(url) {{
+      url = (url || '').trim();
+      for (const [name, cfg] of Object.entries(PRESETS)) {{
+        if (url === cfg.base) return name;
+      }}
+      return '';
+    }}
+
+    // Initial state: try to infer from saved base URL or key
+    const initialProvider = guessFromBase(baseEl.value) || detectFromKey(keyEl.value) || '';
+    if (initialProvider) {{
+      providerEl.value = initialProvider;
+      updateDatalist(initialProvider);
+    }}
+
+    providerEl.addEventListener('change', () => {{
+      applyProvider(providerEl.value, {{ overwriteBase: true, overwriteModel: true }});
+    }});
+
+    keyEl.addEventListener('input', () => {{
+      const guessed = detectFromKey(keyEl.value);
+      if (guessed && providerEl.value !== guessed) {{
+        providerEl.value = guessed;
+        applyProvider(guessed, {{ overwriteBase: !baseEl.value.trim(), overwriteModel: !modelEl.value.trim() }});
+      }}
+    }});
   </script>
 </body>
 </html>"#,

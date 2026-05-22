@@ -60,11 +60,12 @@ pub fn info() -> Option<(String, usize)> {
 }
 
 pub fn clear() {
-    let _ = fs::remove_file(INDEX_FILE);
-    let _ = fs::remove_file(INFO_FILE);
+    let i = fs::remove_file(INDEX_FILE);
+    let f = fs::remove_file(INFO_FILE);
     if let Ok(mut g) = cache().lock() {
         *g = None;
     }
+    println!("RAG cleared (index: {:?}, info: {:?})", i.is_ok(), f.is_ok());
 }
 
 pub fn extract_text(filename: &str, bytes: &[u8]) -> Result<String, String> {
@@ -259,5 +260,7 @@ pub fn retrieve(query: &str, top_k: usize) -> Vec<String> {
 }
 
 pub fn retrieve_default(query: &str) -> Vec<String> {
-    retrieve(query, TOP_K_DEFAULT)
+    let r = retrieve(query, TOP_K_DEFAULT);
+    println!("RAG retrieved {} chunks for query", r.len());
+    r
 }
