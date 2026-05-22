@@ -239,6 +239,32 @@ pub async fn query_llm(prompt: &str) -> String {
         query_local_llm(&url, messages).await
     };
 
+    if reply.starts_with("Error:") {
+        eprintln!("⚠️  LLM error (showing friendly message to user): {}", reply);
+        return user_friendly_error(&reply);
+    }
+
     println!("LLM reply: {}", reply);
     reply
+}
+
+fn user_friendly_error(err: &str) -> String {
+    let lower = err.to_lowercase();
+    if lower.contains("quota")
+        || lower.contains("rate")
+        || lower.contains("429")
+        || lower.contains("too many")
+        || lower.contains("exceeded")
+    {
+        "Sorry, AI is not available right now. Please try again in a moment.".into()
+    } else if lower.contains("connect")
+        || lower.contains("network")
+        || lower.contains("reach")
+        || lower.contains("dns")
+        || lower.contains("timed out")
+    {
+        "I'm having trouble connecting right now. Please try again shortly.".into()
+    } else {
+        "Sorry, I couldn't process that. Please try again.".into()
+    }
 }
