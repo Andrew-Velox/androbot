@@ -40,7 +40,9 @@ To connect a Facebook Page, expose the webhook publicly with one of the tunnel s
 ./scripts/tunnel-ng.sh         # ngrok fallback
 ```
 
-Point your Meta webhook to `https://<tunnel-url>/webhook`. Verify token: `ANDROBOT_VERIFY_TOKEN`. Add the **Facebook Page Access Token** in `/setup`.
+1. **Point your Meta webhook to `https://<tunnel-url>/webhook`. 
+2. **Verify token: `ANDROBOT_VERIFY_TOKEN`. 
+3. **Add the **Facebook Page Access Token** in `/setup`.
 
 > WhatsApp integration is planned but not yet implemented.
 
